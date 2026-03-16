@@ -16,10 +16,10 @@ export function PWAInstallPrompt() {
     <AnimatePresence>
       {isInstallable && (
         <motion.div
-          initial={{ opacity: 0, y: 50, scale: 0.9 }}
-          animate={{ opacity: 1, y: 0, scale: 1 }}
-          exit={{ opacity: 0, y: 50, scale: 0.9 }}
-          className="fixed bottom-6 left-1/2 z-[100] -translate-x-1/2 w-[calc(100%-2rem)] max-w-md"
+          initial={{ opacity: 0, y: 50, scale: 0.9, x: "-50%" }}
+          animate={{ opacity: 1, y: 0, scale: 1, x: "-50%" }}
+          exit={{ opacity: 0, y: 50, scale: 0.9, x: "-50%" }}
+          className="fixed bottom-24 md:bottom-6 left-1/2 z-[100] w-[calc(100%-2rem)] max-w-md"
         >
           <div className="flex items-center justify-between gap-4 rounded-3xl border border-primary-200 bg-white/90 p-4 shadow-2xl backdrop-blur-xl dark:border-primary-800/40 dark:bg-surface-dark/90">
             <div className="flex items-center gap-3">
