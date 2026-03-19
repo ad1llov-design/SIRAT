@@ -31,6 +31,9 @@ export {
   saveLocation,
   loadSavedLocation,
 } from "./services/geolocation";
+export { PrayerHistory } from "./components/PrayerHistory";
+export { DailyFlowModal } from "./components/DailyFlowModal";
+export { PrayerLogModal } from "./components/PrayerLogModal";
 export {
   getPrayerLogs,
   upsertPrayerLog,

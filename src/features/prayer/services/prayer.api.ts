@@ -67,9 +67,21 @@ export async function fetchPrayerTimes(
     path = `timings/${day}-${month}-${year}`;
   }
 
-  const url = `${ALADHAN_BASE_URL}/${path}?latitude=${coords.latitude}&longitude=${coords.longitude}&method=${method}&school=${DEFAULT_SCHOOL}`;
+  let methodToUse = method;
   
-  console.log(`[PrayerAPI] Fetching: ${url}`);
+  // Logic for country-specific methods
+  // KG: Spiritual Board (fallback to Method 3: MWL)
+  // UZ: Muslim Board (fallback to Method 1: Karachi)
+  const country = (globalThis as any).siratCountry || "Global";
+  if (country === "KG" || country === "Kyrgyzstan") {
+    methodToUse = 3; // Muslim World League
+  } else if (country === "UZ" || country === "Uzbekistan") {
+    methodToUse = 1; // University of Islamic Sciences, Karachi
+  }
+
+  const url = `${ALADHAN_BASE_URL}/${path}?latitude=${coords.latitude}&longitude=${coords.longitude}&method=${methodToUse}&school=${DEFAULT_SCHOOL}`;
+  
+  console.log(`[PrayerAPI] Fetching for ${country}: ${url}`);
 
   const response = await fetch(url, {
     next: { revalidate: 600 }, // 10 minutes cache for better responsiveness during fixes

@@ -8,7 +8,11 @@
 "use client";
 
 import { cn } from "@shared/lib/utils";
-import type { PrayerTime } from "../types/prayer.types";
+import type { PrayerTime, TrackingStatus } from "../types/prayer.types";
+import { CheckCircle2, XCircle, Clock } from "lucide-react";
+import { usePrayerStore } from "../store/prayerStore";
+import { prayerTracker } from "../services/prayerTracker";
+import { useLanguage } from "@shared/i18n/LanguageContext";
 
 interface PrayerCardProps {
   prayer: PrayerTime;
@@ -16,9 +20,19 @@ interface PrayerCardProps {
 }
 
 export function PrayerCard({ prayer, animated = true }: PrayerCardProps) {
-  const { status, info, time } = prayer;
+  const { t } = useLanguage();
+  const { status, info, time, name } = prayer;
   const isCurrent = status === "current";
   const isPassed = status === "passed";
+
+  const tracking = usePrayerStore((state) => state.tracking);
+  const updatePrayerStatus = usePrayerStore((state) => state.updatePrayerStatus);
+  const currentTracking = tracking[name] || "pending";
+
+  const handleStatusUpdate = async (newStatus: TrackingStatus) => {
+    await prayerTracker.updateStatus(name, newStatus);
+    updatePrayerStatus(name, newStatus);
+  };
 
   return (
     <div
@@ -85,29 +99,64 @@ export function PrayerCard({ prayer, animated = true }: PrayerCardProps) {
         </div>
       </div>
 
-      {/* ── Right: Time + Status ──────────────── */}
+      {/* ── Right: Time + Status + Actions ────── */}
       <div className="flex items-center gap-3">
-        {isCurrent && (
-          <span className="hidden rounded-full bg-primary-100 px-2.5 py-0.5 text-[0.65rem] font-semibold uppercase tracking-wider text-primary-700 dark:bg-primary-900/40 dark:text-primary-300 sm:inline-flex">
-            Сейчас
-          </span>
-        )}
-        {isPassed && (
-          <span className="hidden rounded-full bg-neutral-100 px-2.5 py-0.5 text-[0.65rem] font-semibold uppercase tracking-wider text-neutral-400 dark:bg-neutral-800 dark:text-neutral-600 sm:inline-flex">
-            Прошёл
-          </span>
-        )}
-
-        <p
-          className={cn(
-            "min-w-[3.5rem] text-right font-mono text-base font-bold tabular-nums transition-colors",
-            isCurrent && "text-primary-700 dark:text-primary-300",
-            isPassed && "text-neutral-300 line-through dark:text-neutral-700",
-            !isCurrent && !isPassed && "text-neutral-900 dark:text-neutral-100",
+        {/* Status Indicator Icon */}
+        <div className="flex items-center gap-1.5 mr-1">
+          {currentTracking === "completed" && (
+            <CheckCircle2 className="h-5 w-5 text-primary-500 animate-in zoom-in duration-300" />
           )}
-        >
-          {time}
-        </p>
+          {currentTracking === "missed" && (
+            <XCircle className="h-5 w-5 text-red-500 animate-in zoom-in duration-300" />
+          )}
+          {currentTracking === "qaza" && (
+            <Clock className="h-5 w-5 text-yellow-500 animate-in zoom-in duration-300" />
+          )}
+        </div>
+
+        <div className="flex flex-col items-end gap-1">
+          <p
+            className={cn(
+              "font-mono text-base font-bold tabular-nums transition-colors",
+              isCurrent && "text-primary-700 dark:text-primary-300",
+              isPassed && "text-neutral-300 dark:text-neutral-700",
+              !isCurrent && !isPassed && "text-neutral-900 dark:text-neutral-100",
+              currentTracking === "completed" && "text-primary-600 dark:text-primary-400 font-extrabold",
+            )}
+          >
+            {time}
+          </p>
+          
+          {/* Action Buttons for Current or Passed */}
+          {(isCurrent || isPassed) && currentTracking === "pending" && (
+            <div className="flex gap-2 mt-1 animate-in fade-in slide-in-from-right-2 duration-300">
+              <button
+                onClick={(e) => { e.stopPropagation(); handleStatusUpdate("completed"); }}
+                className="rounded-lg bg-primary-100 px-2 py-1 text-[10px] font-bold text-primary-700 dark:bg-primary-900/40 dark:text-primary-300 transition-transform active:scale-95"
+              >
+                Совершил
+              </button>
+              <button
+                onClick={(e) => { e.stopPropagation(); handleStatusUpdate("missed"); }}
+                className="rounded-lg bg-red-50 px-2 py-1 text-[10px] font-bold text-red-600 dark:bg-red-950/20 dark:text-red-400 transition-transform active:scale-95"
+              >
+                Пропустил
+              </button>
+            </div>
+          )}
+          
+          {/* Status Label */}
+          {currentTracking !== "pending" && (
+            <span className={cn(
+              "text-[10px] font-bold uppercase tracking-wider",
+              currentTracking === "completed" ? "text-primary-500" : 
+              currentTracking === "missed" ? "text-red-400" : "text-yellow-500"
+            )}>
+              {currentTracking === "completed" ? "Принят" : 
+               currentTracking === "missed" ? "Пропущен" : "Каза"}
+            </span>
+          )}
+        </div>
       </div>
 
       {/* ── Current prayer accent ──── */}

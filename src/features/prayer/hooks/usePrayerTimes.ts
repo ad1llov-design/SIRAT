@@ -1,23 +1,18 @@
 /**
  * @module features/prayer/hooks/usePrayerTimes
  *
- * Главный хук модуля. Оркестрирует весь flow:
- * 1. Загружает/запрашивает геолокацию
- * 2. Запрашивает API Aladhan
- * 3. Парсит и рассчитывает статусы
- * 4. Обновляет статусы каждую минуту (setInterval)
- * 5. Синхронизирует всё в Zustand store
+ * Центральный хук для работы с временами намаза.
+ * Интегрирует: Геолокацию, API, Zustand Store, Трекинг и Уведомления.
  */
 
 "use client";
 
-import { useCallback, useEffect, useRef } from "react";
-
+import { useState, useEffect, useCallback, useRef } from "react";
 import {
   calculatePrayerStatuses,
-  fetchPrayerTimes,
   getCurrentPrayer,
   getNextPrayer,
+  fetchPrayerTimes,
   parsePrayerTimes,
 } from "../services/prayer.api";
 import {
@@ -25,13 +20,20 @@ import {
   loadSavedLocation,
   saveLocation,
 } from "../services/geolocation";
+import { prayerTracker } from "../services/prayerTracker";
+import { notificationService } from "../services/notifications";
 import { usePrayerStore } from "../store/prayerStore";
+import type { PrayerTime } from "../types/prayer.types";
 
 /* ── Hook ───────────────────────────────────────────────────────────── */
 
 export function usePrayerTimes() {
   const store = usePrayerStore();
-  const intervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
+  const [showModal, setShowModal] = useState(false);
+  const [modalPrayer, setModalPrayer] = useState<PrayerTime | null>(null);
+  
+  const refreshInterval = useRef<NodeJS.Timeout>();
+  const lastCheckedPrayer = useRef<string | null>(null);
 
   /**
    * Загружает времена намазов: гео → API → парсинг → store
@@ -50,6 +52,9 @@ export function usePrayerTimes() {
         saveLocation(location);
       }
       store.setLocation(location);
+      if (location.country) {
+        (globalThis as any).siratCountry = location.country;
+      }
 
       // 2. Запрашиваем API
       console.log("[usePrayerTimes] Fetching times for", location.coords);
@@ -60,16 +65,24 @@ export function usePrayerTimes() {
       if (prayers.length === 0) throw new Error("API вернул пустой список времен");
 
       // 4. Обновляем store
-      store.setPrayers(prayers);
-      store.setCurrentPrayer(getCurrentPrayer(prayers));
-      store.setNextPrayer(getNextPrayer(prayers));
+      const now = new Date();
+      const prayersWithStatus = calculatePrayerStatuses(prayers, now);
+      
+      store.setPrayers(prayersWithStatus);
+      store.setCurrentPrayer(getCurrentPrayer(prayersWithStatus));
+      store.setNextPrayer(getNextPrayer(prayersWithStatus));
 
       // 5. Hijri дата
       const hijri = apiResponse.data.date.hijri;
       store.setHijriDate(
-        `${hijri.day} ${hijri.month.ar} ${hijri.year}`,
+        `${hijri.day} ${hijri.month.ru || hijri.month.ar} ${hijri.year}`,
       );
       store.setGregorianDate(apiResponse.data.date.readable);
+
+      // 6. Sync tracking
+      const today = new Date().toISOString().split("T")[0] || "";
+      const tracking = await prayerTracker.syncWithRemote(today);
+      store.setTracking(tracking.prayers);
 
     } catch (err) {
       console.error("[usePrayerTimes] Error loading prayer times:", err);
@@ -86,17 +99,35 @@ export function usePrayerTimes() {
    * Обновляет статусы (current/next) без повторного запроса к API
    */
   const refreshStatuses = useCallback(() => {
-    const { prayers } = usePrayerStore.getState();
-    if (prayers.length === 0) return;
+    if (store.prayers.length === 0) return;
 
+    // Update statuses based on current time
     const now = new Date();
-    const updated = calculatePrayerStatuses(prayers, now);
+    const updatedPrayers = calculatePrayerStatuses(store.prayers, now);
+    const current = updatedPrayers.find((p) => p.status === "current") || null;
+    const next = updatedPrayers.find((p) => p.status === "upcoming") || null;
 
-    store.setPrayers(updated);
-    store.setCurrentPrayer(getCurrentPrayer(updated));
-    store.setNextPrayer(getNextPrayer(updated));
+    // Trigger Notification when prayer starts
+    if (current && current.name !== lastCheckedPrayer.current) {
+      notificationService.showNotification(`Время намаза: ${current.info.nameRu}`, {
+        body: `Наступило время молитвы ${current.info.nameRu}.`,
+      });
+      notificationService.scheduleReminder(current.name, 30);
+      lastCheckedPrayer.current = current.name;
+    }
+
+    // Trigger Modal when a prayer becomes "passed" and was not completed
+    const justPassed = updatedPrayers.find(p => p.status === "passed" && store.prayers.find(oldP => oldP.name === p.name && oldP.status === "current"));
+    if (justPassed && store.tracking[justPassed.name] === "pending") {
+      setModalPrayer(justPassed);
+      setShowModal(true);
+    }
+
+    store.setPrayers(updatedPrayers);
+    store.setCurrentPrayer(current);
+    store.setNextPrayer(next);
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
+  }, [store.prayers, store.tracking, setShowModal, setModalPrayer]);
 
   /**
    * Принудительно обновить с новой геолокацией
@@ -116,9 +147,9 @@ export function usePrayerTimes() {
 
   // Обновление статусов каждые 30 секунд
   useEffect(() => {
-    intervalRef.current = setInterval(refreshStatuses, 30_000);
+    refreshInterval.current = setInterval(refreshStatuses, 30_000);
     return () => {
-      if (intervalRef.current) clearInterval(intervalRef.current);
+      if (refreshInterval.current) clearInterval(refreshInterval.current);
     };
   }, [refreshStatuses]);
 
@@ -131,6 +162,9 @@ export function usePrayerTimes() {
     location: store.location,
     isLoading: store.isLoading,
     error: store.error,
+    showModal,
+    setShowModal,
+    modalPrayer,
     refresh: loadPrayerTimes,
     refreshLocation,
   };

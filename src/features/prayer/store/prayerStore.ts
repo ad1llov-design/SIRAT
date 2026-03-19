@@ -14,6 +14,7 @@ import type {
   LocationInfo,
   PrayerState,
   PrayerTime,
+  TrackingStatus,
 } from "../types/prayer.types";
 
 /* ── Actions interface ──────────────────────────────────────────────── */
@@ -27,6 +28,8 @@ interface PrayerActions {
   setLocation: (location: LocationInfo | null) => void;
   setLoading: (loading: boolean) => void;
   setError: (error: string | null) => void;
+  setTracking: (tracking: Record<string, TrackingStatus>) => void;
+  updatePrayerStatus: (name: string, status: TrackingStatus) => void;
   reset: () => void;
 }
 
@@ -41,6 +44,7 @@ const initialState: PrayerState = {
   location: null,
   isLoading: true,
   error: null,
+  tracking: {},
 };
 
 /* ── Store ──────────────────────────────────────────────────────────── */
@@ -73,6 +77,14 @@ export const usePrayerStore = create<PrayerState & PrayerActions>()(
 
       setError: (error) =>
         set({ error, isLoading: false }, false, "prayer/setError"),
+
+      setTracking: (tracking) =>
+        set({ tracking }, false, "prayer/setTracking"),
+
+      updatePrayerStatus: (name, status) =>
+        set((state) => ({
+          tracking: { ...state.tracking, [name]: status }
+        }), false, "prayer/updatePrayerStatus"),
 
       reset: () =>
         set(initialState, false, "prayer/reset"),

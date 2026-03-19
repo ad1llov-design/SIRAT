@@ -35,6 +35,7 @@ export const PRAYER_LIST: PrayerInfo[] = [
 /* ── Prayer Status ──────────────────────────────────────────────────── */
 
 export type PrayerStatus = "upcoming" | "current" | "passed";
+export type TrackingStatus = "pending" | "completed" | "missed" | "qaza";
 
 /* ── Prayer Time ────────────────────────────────────────────────────── */
 
@@ -129,6 +130,7 @@ export interface PrayerState {
   hijriDate: string;
   gregorianDate: string;
   location: LocationInfo | null;
+  tracking: Record<string, TrackingStatus>;
   isLoading: boolean;
   error: string | null;
 }
